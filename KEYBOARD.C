@@ -17,11 +17,13 @@ unsigned char recentKeyAvailable;
 
 static void interrupt far keyb_int(void) {
 	unsigned char port_b;
-	unsigned char rawcode = inp(0x60);
+	unsigned char rawcode;
 
 	static unsigned char buffer;
 	unsigned char make_break;
 	int scancode;
+	_disable();
+	rawcode = inp(0x60);
 
 	make_break = !(rawcode & 0x80);
 	scancode = rawcode & 0x7F;
@@ -52,6 +54,7 @@ static void interrupt far keyb_int(void) {
 	outp(0x61, port_b);
 	/*end interrupts*/
 	outp(0x20, 0x20);
+	_enable();
 }
 
 void startKeyboard(void) {
@@ -71,6 +74,7 @@ void clearRecentKeyAvailable(void) {
 
 
 unsigned char getRecentKeyPressed(void) {
+	clearRecentKeyAvailable();
 	return recentKeyPressed;
 }
 

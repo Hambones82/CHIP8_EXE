@@ -20,7 +20,6 @@
 int main(int argc, char** argv) {
 	int i = 0;
 	struct c8State *coreState;
-	/*char disasm[MAX_DSM_MSG];*/
 	int op = 0;
 	int fileSize = 0;
 	int stall = 0;
@@ -46,20 +45,20 @@ int main(int argc, char** argv) {
 		printf("failed to load file %s\n", argv[1]);
 		exit(1);
 	}
-	initControls();
 	initDrawing();
+	initDebugUI();
 	startTimer();
+	initControls();
 	startKeyboard();
 	initSound();
 	while(!getScanCodeDown(1)) {
 		c8CtrlExecute(coreState);
-/*
-		if(isRecentKeyAvailable()) {
-			debugUIProcessInput(getRecentKeyPressed());
+		if(isPaused() && UIIsDirty()) {
+			refreshUI(coreState);
 		}
-*/
-		clearRecentKeyAvailable();
-
+		if(isRecentKeyAvailable()) {
+			debugUIProcessInput(getRecentKeyPressed(), coreState);
+		}
 	}
 	endDebug();
 	deInitDrawing();

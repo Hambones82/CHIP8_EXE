@@ -15,6 +15,8 @@ struct c8State {
 	unsigned char mem[4096];
 };
 
+int getOp(struct c8State *state);
+int getOpAt(struct c8State *state, int address);
 int loadROMFile(struct c8State *state, char *file);
 struct c8State *initC8State(void);
 void testInit(struct c8State *state);

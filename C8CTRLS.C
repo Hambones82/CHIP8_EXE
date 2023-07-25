@@ -55,14 +55,15 @@ signed char keyPressed(void) {
 
 struct c8Controls controls;
 
-void updateCtrls(struct c8Setting *setting) {
-
+int isPaused() {
+	return controls.step_halted;
 }
 
 void setDrawHalt(void) {
 	controls.draw_halted = C8SETTING_ON;
 }
 
+#pragma check_stack(off)
 void resetDrawHalt(void) {
 	controls.draw_halted = C8SETTING_OFF;
 }
@@ -70,10 +71,47 @@ void resetDrawHalt(void) {
 void initControls(void) {
 	controls.draw_halted = C8SETTING_OFF;
 	controls.step_halted = C8SETTING_OFF;
+	controls.step_once = C8SETTING_OFF;
 	controls.FX0A_halted = C8SETTING_OFF;
 	RegisterTimerCallback(resetDrawHalt);
 }
 
+int getSetting(int settingType) {
+	switch(settingType) {
+		case C8_STEP_HALT:
+			return controls.step_halted;
+			break;
+		case C8_DRAW_HALT:
+			return controls.draw_halted;
+			break;
+		case C8_FX0A_HALT:
+			return controls.FX0A_halted;
+			break;
+		default:
+			printf("requesting unsupported setting in c8ctrls\n");
+			exit(1);
+	}
+}
+
+void updateCtrls(struct c8Setting *setting) {
+	switch(setting->settingType) {
+		case C8_STEP_HALT:
+			controls.step_halted = setting->onOff;
+			break;
+		case C8_DRAW_HALT:
+			controls.draw_halted = setting->onOff;
+			break;
+		case C8_FX0A_HALT:
+			controls.FX0A_halted = setting->onOff;
+			break;
+		case C8_STEP_ONCE:
+			controls.step_once = setting->onOff;
+			break;
+		default:
+			printf("updating unsupported setting in c8ctrls\n");
+			exit(1);
+	}
+}
 
 void c8CtrlExecute(struct c8State *state) {
 	int stall_type = C8_NO_HALT;
@@ -82,15 +120,21 @@ void c8CtrlExecute(struct c8State *state) {
 	if(controls.draw_halted == C8SETTING_ON) { /*draw halt*/
 		return;
 	}
-	else if(controls.step_halted == C8SETTING_ON) { /*step paused*/
+	else if(controls.step_halted == C8SETTING_ON &&
+			controls.step_once == C8SETTING_OFF) { /*step paused*/
 		return;/*fix...??  or maybe just with P, call execute?*/
 		/*maybe we just do executeOnce or something...*/
 	}
 	else if(controls.FX0A_halted == C8SETTING_OFF) { /*dealing w fx0a stall*/
 		stall_type = c8Execute(state);
+		controls.step_once = C8SETTING_OFF;
 
 		if(stall_type == C8_FX0A_HALT) {
+			controls.FX0A_halted = C8SETTING_ON;
 			startKeyPressTracking();
+		}
+		else if(stall_type == C8_DRAW_HALT) {
+			controls.draw_halted = C8SETTING_ON;
 		}
 	}
 	else { /*this is the fx0a stall*/

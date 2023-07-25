@@ -28,8 +28,7 @@ int c8KeytoScanCode(unsigned char c8Key) {
 /*return value is whether to stall for keyboard*/
 int c8Execute(struct c8State *state) {
 	int retVal = C8_NO_HALT;
-	unsigned int op = (((int)(state->mem[state->PC])) << 8) +
-		(int)(state->mem[state->PC+1]);
+	unsigned int op = getOp(state);
 	int three_nibble = op & 0x0FFF;
 	int byte = op & 0x00FF;
 	int nibble = op & 0xF;
@@ -53,8 +52,8 @@ int c8Execute(struct c8State *state) {
 				clearDisplay();
 				break;
 				case 0xEE:
-				state->PC = state->stack[state->SP];
 				state->SP--;
+				state->PC = state->stack[state->SP];
 				break;
 			}
 			break;
@@ -62,8 +61,8 @@ int c8Execute(struct c8State *state) {
 			state->PC = three_nibble;
 			break;
 		case 2:
-			state->SP++;
 			state->stack[state->SP] = state->PC;
+			state->SP++;
 			state->PC = three_nibble;
 			break;
 		case 3:
@@ -158,12 +157,14 @@ int c8Execute(struct c8State *state) {
 				state->v[0] ^ state->v[1] ^ state->SP;
 			break;
 		case 0xD:
+
 			state->v[0xF] = drawCH8(&(state->mem[0]),
 				state->v[VxReg],
 				state->v[VyReg],
 				nibble,
 				state->I);
 				retVal = C8_DRAW_HALT;
+
 			break;
 		case 0xE:
 			{

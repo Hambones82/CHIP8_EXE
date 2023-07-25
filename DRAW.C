@@ -8,30 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define VERT_OFFSET 1
-#define HOR_OFFSET 1
-
-#define SCREEN_X 64
-#define SCREEN_Y 32
-
-#define TEXT_X 80
-#define TEXT_Y 25
-/*
-#define DRAW_CH8_INNER                                                  \
-	c8Col &= 0x003F;                                                    \
-	{                                                                   \
-	unsigned char fb_char = textFrameBuffer[memRowOffset +              \
-		((c8Col+HOR_OFFSET)<<1)];                                       \
-	char c8Color = (c8Byte & 0x80) ? 0xFF : 0;                          \
-	unsigned char parity = (c8RowOffset + y) & 1;                       \
-	unsigned char maskSelect = parity | (fb_char & 0x06);               \
-	unsigned char newFBChar = fb_char ^ (maskLut[maskSelect] & c8Color);\
-	textFrameBuffer[memRowOffset + ((c8Col+HOR_OFFSET)<<1)] = newFBChar;\
-	c8Byte <<= 1;                                                       \
-	retVal |= c8Color && ((maskSelect == 2) || (maskSelect == 3) ||     \
-		(maskSelect == 5) || (maskSelect == 6));                        \
-	}
-*/
 unsigned char far *textFrameBuffer = (char far *)(0xB8000000);
 
 unsigned char maskLut[8] = {
@@ -46,11 +22,22 @@ char far *getTextFBPtr(int x, int y) {
 	return (char far *)(0xB8000000 + (y * 160) + (x * 2));
 }
 
+void setAttribute(int x, int y, unsigned char attribute) {
+	*(getTextFBPtr(x, y)+1) = attribute;
+}
+
+void drawAttributeRange(int x0, int length, int y, unsigned char attribute) {
+	int x = 0;
+	for(x; x < length; x++) {
+		*(getTextFBPtr(x+x0, y)+1) = attribute;
+	}
+}
+
 void drawCharAt(int x, int y, char c) {
 	*(getTextFBPtr(x, y)) = c;
 }
 
-void printfAt(int x, int y, char *msg, ...) {
+int printfAt(int x, int y, char *msg, ...) {
 	va_list args;
 	int numCharsPrinted;
 
@@ -62,6 +49,7 @@ void printfAt(int x, int y, char *msg, ...) {
 		exit(1);
 	}
 	va_end(args);
+	return numCharsPrinted;
 }
 
 void clearOutsideDisplay(void) {
@@ -231,7 +219,7 @@ unsigned char clipMask;
 unsigned char clipShift = 64 - (unsigned char)c8Col;
 unsigned char clipVert = 32 - (y&0x1F);
 unsigned char numLines = numBytes > clipVert ? clipVert : numBytes;
-setDrawHalt();
+//setDrawHalt();
 if(c8Col < 56) clipMask = 0xFF;
 else clipMask = ((1 << clipShift) - 1) << (8 - clipShift);
 for(c8RowOffset; c8RowOffset < numLines; c8RowOffset++) {

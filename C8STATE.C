@@ -83,6 +83,16 @@ struct c8State *initC8State(void) {
 	return retVal;
 }
 
+int getOp(struct c8State *state) {
+	return (((int)(state->mem[state->PC])) << 8) +
+		(int)(state->mem[state->PC+1]);
+}
+
+int getOpAt(struct c8State *state, int address) {
+	return (((int)(state->mem[address])) << 8) +
+		(int)(state->mem[address + 1]);
+}
+
 void testInit(struct c8State *state) {
 	int i = 0;
 	for(i = 0; i < 16; i++) {

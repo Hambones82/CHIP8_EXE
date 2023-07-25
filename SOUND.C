@@ -14,6 +14,8 @@ void startBeep(void) {
 	outp(0x61, p61_data);
 }
 
+/*add the pragma*/
+#pragma check_stack(off)
 void stopBeep(void) {
 	unsigned char p61_data = inp(0x61);
 	p61_data &= 0xFC;

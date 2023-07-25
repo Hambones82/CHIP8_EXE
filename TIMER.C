@@ -26,27 +26,33 @@ void RegisterTimerCallback(TimerCallback cb) {
 }
 
 static void interrupt far timer_handler(void) {
+
 	int i = 0;
 	for(i; i < tCBCounter; i++) {
 		tCallbacks[i]();
 	}
+
+	//_disable();
+	resetDrawHalt();
 	if(timer) {
 		timer--;
 	}
 	if(soundTimer) {
-		dLog("sound timer val: %d\n", soundTimer);
+		//dLog("sound timer val: %d\n", soundTimer);
 		soundTimer--;
 		if(soundTimer == 0) {
-			dLog("ending beep\n");
+			//dLog("ending beep\n");
 			stopBeep();
 		}
 	}
+	//_enable();
 }
 
 void (interrupt far *old_timer)();
 
 void startTimer(void) {
 	char escape_char = 0;
+	_disable();
 	old_timer = _dos_getvect(0x1C);
 	outp(0x43, 0x36);
 	escape_char = 1;
@@ -55,6 +61,7 @@ void startTimer(void) {
 	outp(0x40, 0x4D);
 
 	_dos_setvect(0x1C, timer_handler);
+	_enable();
 }
 
 void endTimer(void) {
