@@ -80,6 +80,9 @@ struct c8State *initC8State(void) {
 	retVal->I = 0;
 	retVal->SP = 0;
 	retVal->keyPressedReg = 0;
+	retVal->history = initStateHistory();
+	retVal->traverser = getHistoryTraverser(retVal->history);
+
 	return retVal;
 }
 

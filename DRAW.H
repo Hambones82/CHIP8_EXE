@@ -23,6 +23,10 @@ struct screenPos {
 	int y;
 };
 
+struct chip8FB {
+	unsigned char bytes[256];
+};
+
 void initDrawing(void);
 void deInitDrawing(void);
 
@@ -39,5 +43,6 @@ int printfAt(int x, int y, char *msg, ...);
 #define AREA_LEFT   2
 #define AREA_BOTTOM 3
 void GetAreaOffset(unsigned char area, struct screenPos *pos);
+void serializeFB(unsigned char *output);
 
 #endif

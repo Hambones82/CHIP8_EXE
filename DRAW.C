@@ -42,7 +42,7 @@ int printfAt(int x, int y, char *msg, ...) {
 	int numCharsPrinted;
 
 	va_start(args, msg);
-	_settextposition(y, x);/*for some reason this is y, x...*/
+	_settextposition(y+1, x+1);/*for some reason this is y, x...*/
 	numCharsPrinted = vprintf(msg, args);
 	if(numCharsPrinted == -1 || numCharsPrinted > TEXT_X) {
 		printf("too many chars printed - limited to screen width");
@@ -91,8 +91,8 @@ void GetAreaOffset(unsigned char area, struct screenPos *pos) {
 				pos->y = -1;
 			}
 			else {
-				pos->x = HOR_OFFSET + SCREEN_X + 2;
-				pos->y = VERT_OFFSET;
+				pos->x = HOR_OFFSET + SCREEN_X + 1;
+				pos->y = VERT_OFFSET - 1;
 			}
 		break;
 		case AREA_TOP:
@@ -112,7 +112,7 @@ void GetAreaOffset(unsigned char area, struct screenPos *pos) {
 			}
 			else {
 				pos->x = 0;
-				pos->y = VERT_OFFSET;
+				pos->y = VERT_OFFSET-1;
 			}
 		break;
 		case AREA_BOTTOM:
@@ -122,7 +122,7 @@ void GetAreaOffset(unsigned char area, struct screenPos *pos) {
 			}
 			else {
 				pos->x = 0;
-				pos->y = VERT_OFFSET + 2 + SCREEN_Y / 2;
+				pos->y = VERT_OFFSET + 1 + SCREEN_Y / 2;
 			}
 		break;
 		default:
@@ -226,7 +226,6 @@ for(c8RowOffset; c8RowOffset < numLines; c8RowOffset++) {
 	int i = 0;
 	unsigned char c8Byte = memoryBuffer[I+c8RowOffset] & clipMask;
 	memRowOffset = ((((c8RowOffset + y)&0x1F) >> 1) + VERT_OFFSET) * 160;
-	/*for(c8Col = x; c8Col < x + 8; c8Col++) {*/
 	for(i = 0; i < 8; i++) {
 		c8Col = (x + i) & 0x003F;
 		{
@@ -241,26 +240,46 @@ for(c8RowOffset; c8RowOffset < numLines; c8RowOffset++) {
 		retVal |= c8Color && ((maskSelect == 2) || (maskSelect == 3) ||
 			(maskSelect == 5) || (maskSelect == 6));
 		}
-	/*
-	DRAW_CH8_INNER
-	c8Col++;
-	DRAW_CH8_INNER
-	c8Col++;
-	DRAW_CH8_INNER
-	c8Col++;
-	DRAW_CH8_INNER
-	c8Col++;
-	DRAW_CH8_INNER
-	c8Col++;
-	DRAW_CH8_INNER
-	c8Col++;
-	DRAW_CH8_INNER
-	c8Col++;
-	DRAW_CH8_INNER*/
 	}
 }
 
 	/*need to return the overwrite*/
 	return retVal;
+}
+
+
+unsigned char getBitVal(unsigned char rowParity, unsigned char screenByte) {
+	switch(rowParity) {
+		case 0:
+			return (screenByte & 0x02) >> 1;
+			break;
+		case 1:
+			return ((screenByte & 0x02) >> 1) ^ ((screenByte & 0x04) >> 2);
+			break;
+	}
+	//error
+	return 0x1;
+}
+
+void serializeFB(unsigned char *bytes) {
+	//traverse the real frame buffer and build output bytes based on that
+	int x, y, bit, outputIndex, inputIndex;
+	outputIndex = 0;
+	for(y = 0; y < 16; y++) {
+		inputIndex = (VERT_OFFSET + y) * 160 + HOR_OFFSET * 2;
+		//do two rows at once
+		for(x = 0; x < 8; x++) {
+			for(bit = 0; bit < 8; bit++) {
+				unsigned char screenByte = textFrameBuffer[inputIndex];
+				bytes[outputIndex] <<= 1;
+				bytes[outputIndex] |= getBitVal(0, screenByte);
+				bytes[outputIndex+8] <<= 1;
+				bytes[outputIndex+8] |= getBitVal(1, screenByte);
+				inputIndex+=2;
+			}
+			outputIndex++;
+		}
+		outputIndex += 8;
+	}
 }
 

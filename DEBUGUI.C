@@ -1,3 +1,10 @@
+//todo: fix up a bunch of things -- e.g.:
+//  bold section headings
+//  alignment of bottom row things
+//  most recent instruction -- more complex than i thought - come back
+
+#define LOOKAHEAD 5
+
 #include "c8dsm.h"
 #include "draw.h"
 #include "c8state.h"
@@ -40,16 +47,17 @@ struct UIState {
 	struct screenPos left_write_pos;
 	struct screenPos right_write_pos;
 	struct screenPos bottom_write_pos;
-	int speedSide, regsSide, memSide;
 	struct screenPos speedUIPosition;
 	struct screenPos regsPosition;
 	struct screenPos memPosition;
 	struct screenPos iPosition;
 	struct screenPos stackPosition;
+	struct screenPos lastIPosition;
 	int memViewStart;
 	int stackStart;
 	struct numberCapture nCap;
 	int isDirty; //0 if not dirty, 1 if dirty
+	int showDisasm; //0 if no, 1 if yes
 	struct textFieldInfo tfInfo;
 	//other things like current row, state of the elements... could even
 	//break this odwn further and give structs for each element...
@@ -68,9 +76,6 @@ void resetStartPositions() {
 	GetAreaOffset(AREA_LEFT, &uiState.left_write_pos);
 	GetAreaOffset(AREA_TOP, &uiState.top_write_pos);
 	GetAreaOffset(AREA_BOTTOM, &uiState.bottom_write_pos);
-	uiState.speedSide = AREA_RIGHT;
-	uiState.regsSide = AREA_BOTTOM;
-	uiState.memSide = AREA_BOTTOM;
 }
 
 void initDebugUI() {
@@ -85,18 +90,28 @@ void initDebugUI() {
 	uiState.stackStart = 0;
 	uiState.iPosition.x = uiState.right_write_pos.x;
 	uiState.iPosition.y = uiState.right_write_pos.y+1;
+	uiState.lastIPosition.x = uiState.right_write_pos.x;
+	uiState.lastIPosition.y = uiState.right_write_pos.y+3+LOOKAHEAD;
 	uiState.stackPosition.x = uiState.bottom_write_pos.x;
 	uiState.stackPosition.y = uiState.bottom_write_pos.y + 2;
 	clearEnteringNumber();
 	uiState.isDirty = 0;
+	uiState.showDisasm = 1;
 	drawHotkeys();
 }
+
+#define REGS_DIRTY      1
+#define MEM_DIRTY       2
+#define STACK_DIRTY     4
+#define INSTR_DIRTY     8
+#define TEXTFIELD_DIRTY 16
+#define SPEED_DIRTY     32
 
 int UIIsDirty(void) {
 	return uiState.isDirty;
 }
 
-#define REGS_MEM_OFFSET     6
+#define BOTTOM_OFFSET     10
 
 void updateRegs(struct c8State *state) {
 	int i = 0;
@@ -104,19 +119,19 @@ void updateRegs(struct c8State *state) {
 	printfAt(uiState.regsPosition.x, uiState.regsPosition.y,
 		"Regs: ");
 	for(i; i < 16; i++) {
-		printfAt(uiState.regsPosition.x + i * width + REGS_MEM_OFFSET,
+		printfAt(uiState.regsPosition.x + i * width + BOTTOM_OFFSET,
 			uiState.regsPosition.y,
-			" V%X",
+			"V%X ",
 			i);
-		printfAt(uiState.regsPosition.x + i * width + REGS_MEM_OFFSET,
+		printfAt(uiState.regsPosition.x + i * width + BOTTOM_OFFSET,
 			uiState.regsPosition.y+1,
-			" %02X",
+			"%02X ",
 			state->v[i]);
 	}
-	printfAt(uiState.regsPosition.x + 16*3 + REGS_MEM_OFFSET,
+	printfAt(uiState.regsPosition.x + 16*3 + BOTTOM_OFFSET,
 		uiState.regsPosition.y,
 		"   I SP");
-	printfAt(uiState.regsPosition.x + 16*3 + REGS_MEM_OFFSET,
+	printfAt(uiState.regsPosition.x + 16*3 + BOTTOM_OFFSET,
 		uiState.regsPosition.y+1,
 		"%4X%3X", state->I, state->SP);
 }
@@ -126,12 +141,12 @@ void updateMem(struct c8State *state) {
 	int width = 4;
 	printfAt(uiState.memPosition.x, uiState.memPosition.y, "Mem: ");
 	for(i; i < 16; i++) {
-		printfAt(uiState.memPosition.x + i * width + REGS_MEM_OFFSET,
+		printfAt(uiState.memPosition.x + i * width + BOTTOM_OFFSET,
 			uiState.memPosition.y,
 			"%3X ", i + uiState.memViewStart);
-		printfAt(uiState.memPosition.x + i * width + REGS_MEM_OFFSET,
+		printfAt(uiState.memPosition.x + i * width + BOTTOM_OFFSET,
 			uiState.memPosition.y+1,
-			" %02X", state->mem[i + uiState.memViewStart]);
+			"%02X ", state->mem[i + uiState.memViewStart]);
 	}
 }
 #define STACK_DISPLAY_ELEMENTS 8
@@ -143,7 +158,7 @@ void updateStack(struct c8State *state) {
 		uiState.stackStart,
 		uiState.stackStart + STACK_DISPLAY_ELEMENTS - 1);
 	for(i; i < STACK_DISPLAY_ELEMENTS; i++) {
-		printfAt(uiState.stackPosition.x+i*width + 10,
+		printfAt(uiState.stackPosition.x+i*width + BOTTOM_OFFSET,
 			uiState.stackPosition.y,
 			"%04X ", state->stack[i + uiState.stackStart]);
 	}
@@ -153,52 +168,72 @@ void updateStack(struct c8State *state) {
 void drawSpeedUI(struct c8State *state) {
 	printfAt(uiState.speedUIPosition.x, uiState.speedUIPosition.y,
 		"Paused");
-	updateRegs(state);
-	updateMem(state);
 }
-
-#define LOOKAHEAD 10
 
 void drawInstruction(struct c8State *state) {
 	int i = 0;
 	int xClear = 0;
+	int y = uiState.iPosition.y;
 	char dsmMsg[MAX_DSM_MSG];
-	printfAt(uiState.iPosition.x, uiState.iPosition.y,
+	printfAt(uiState.iPosition.x, y++,
 		"PC: %04X", state->PC);
-	printfAt(uiState.iPosition.x, uiState.iPosition.y+1, "---------");
-	//printfAt(uiState.iPosition.x, uiState.iPosition.y+2, "INS: ");
+	printfAt(uiState.iPosition.x, y++, "---------");
 	for(i; i < LOOKAHEAD; i++) {
-		int row = uiState.iPosition.y+i + 2;
-		/*
-		printfAt(uiState.iPosition.x+5, uiState.iPosition.y+2+i,
-			"%02X%02X",
-			state->mem[state->PC+i*2],
-			state->mem[state->PC+1 + i*2]);
-		*/
+		int row = y+i;
 		for(xClear = uiState.iPosition.x; xClear < TEXT_X; xClear++) {
-			//dLog("clearing at %d, %d\n", xClear, row);
-			drawCharAt(xClear, row-1, ' ');//why row - 1???
-		}//todo: figure out why row - 1... this is very weird.
-		disasmOut(getOpAt(state, state->PC + i*2), dsmMsg);
+			drawCharAt(xClear, row, ' ');
+		}
+		if(uiState.showDisasm) {
+			disasmOut(getOpAt(state, state->PC + i*2), dsmMsg);
+		}
+		else {
+			sprintf(dsmMsg, "%04X", getOpAt(state, state->PC + i*2));
+		}
 		printfAt(uiState.iPosition.x, row, dsmMsg);
 	}
+	printfAt(uiState.lastIPosition.x, uiState.lastIPosition.y, "Last:");
+	if(uiState.showDisasm) {
+		disasmOut(getOpcodeRecord(state->traverser)->opcode, dsmMsg);
+	}
+	else {
+		sprintf(dsmMsg, "%04X", getOpcodeRecord(state->traverser)->opcode);
+	}
+	for(xClear = uiState.iPosition.x; xClear < TEXT_X; xClear++) {
+		drawCharAt(xClear, uiState.lastIPosition.y+1, ' ');
+	}
+	//printfAt(uiState.lastIPosition.x, uiState.lastIPosition.y+1, "         ");
+	printfAt(uiState.lastIPosition.x, uiState.lastIPosition.y+1, dsmMsg);
 }
 
 void drawHotkeys() {
 	unsigned char attr = ATTR_BLACK_BG | ATTR_RED_TEXT;
-	printfAt(1, TEXT_Y, "MEM   STACK PAUSE STEP>");
+	printfAt(0, TEXT_Y, "MEM   STACK PAUSE STEP> INSTR");
 	setAttribute(0, TEXT_Y-1, attr);
 	setAttribute(7, TEXT_Y-1, attr);
 	setAttribute(12, TEXT_Y-1, attr);
 	setAttribute(22, TEXT_Y-1, attr);
-
+	setAttribute(24, TEXT_Y-1, attr);
 }
 
 void refreshUI(struct c8State *state) {
-	drawSpeedUI(state);
-	drawInstruction(state);
-	updateStack(state);
-	drawTextField();
+	if(uiState.isDirty & SPEED_DIRTY) {
+		drawSpeedUI(state);
+	}
+	if(uiState.isDirty & REGS_DIRTY) {
+		updateRegs(state);
+	}
+	if(uiState.isDirty & MEM_DIRTY) {
+		updateMem(state);
+	}
+	if(uiState.isDirty & INSTR_DIRTY) {
+		drawInstruction(state);
+	}
+	if(uiState.isDirty & STACK_DIRTY) {
+		updateStack(state);
+	}
+	if(uiState.isDirty & TEXTFIELD_DIRTY) {
+		drawTextField();
+	}
 	uiState.isDirty = 0;
 }
 
@@ -221,13 +256,14 @@ void finalizeEnteringNumber(void) {
 	switch(uiState.nCap.enteringPurpose) {
 		case PURPOSE_MEMORY:
 			uiState.memViewStart = uiState.nCap.currentEnteringVal;
+			uiState.isDirty |= MEM_DIRTY;
 			break;
 		default:
 			break;
 			//Todo: uh oh
 	}
 	clearEnteringNumber();
-	uiState.isDirty = 1;
+	uiState.isDirty |= TEXTFIELD_DIRTY;
 	clearTextField();
 }
 
@@ -292,9 +328,9 @@ void clearTextField(void) {
 void drawTextField(void) {
 	int x = uiState.tfInfo.pos.x;
 	if(uiState.nCap.enteringNumber == 1) {
-		x += printfAt(x+1, uiState.tfInfo.pos.y+1,
+		x += printfAt(x, uiState.tfInfo.pos.y+1,
 			uiState.tfInfo.label);
-		printfAt(x+1, uiState.tfInfo.pos.y+1, "%X",
+		printfAt(x, uiState.tfInfo.pos.y+1, "%X",
 			uiState.nCap.currentEnteringVal);
 		drawAttributeRange(x, uiState.tfInfo.inputSize,
 			uiState.tfInfo.pos.y, ATTR_LIGHT_BG | ATTR_BLACK_TEXT);
@@ -305,13 +341,13 @@ void startTextField(struct textFieldInfo *info) {
 	uiState.nCap.enteringNumber = 1;
 	uiState.nCap.capture_base = info->mode;
 	memcpy(&uiState.tfInfo, info, sizeof(struct textFieldInfo));
-	uiState.isDirty = 1;
+	uiState.isDirty |= TEXTFIELD_DIRTY;
 }
 
 void debugUIProcessInput(signed char scancode, struct c8State *state) {
 	if(uiState.nCap.enteringNumber == 1) {
 		addEnteringNumber(scancode);
-		uiState.isDirty = 1;
+		uiState.isDirty |= TEXTFIELD_DIRTY;
 	}
 	else {
 		if(scancode == SCNCD_M) {
@@ -324,9 +360,13 @@ void debugUIProcessInput(signed char scancode, struct c8State *state) {
 			info.pos.y = TEXT_Y - 1;
 			startTextField(&info);
 		}
+		if(scancode == SCNCD_I) {
+			uiState.showDisasm = uiState.showDisasm == 0 ? 1 : 0;
+			uiState.isDirty |= INSTR_DIRTY;
+		}
 		if(scancode == SCNCD_T) {
 			uiState.stackStart ^= 8;
-			uiState.isDirty = 1;
+			uiState.isDirty |= STACK_DIRTY;
 		}
 		if(scancode == SCNCD_P) {
 			struct c8Setting pause_setting;
@@ -338,7 +378,8 @@ void debugUIProcessInput(signed char scancode, struct c8State *state) {
 				clearUI();
 			}
 			else {
-				uiState.isDirty = 1;
+				uiState.isDirty |= REGS_DIRTY | MEM_DIRTY | STACK_DIRTY
+								| INSTR_DIRTY | SPEED_DIRTY;
 			}
 		}
 		if(scancode == SCNCD_PERIOD) { //this does not seem right...
@@ -347,7 +388,8 @@ void debugUIProcessInput(signed char scancode, struct c8State *state) {
 			step_setting.settingType = C8_STEP_ONCE;
 			step_setting.onOff = C8SETTING_ON;
 			updateCtrls(&step_setting);
-			uiState.isDirty = 1;
+			uiState.isDirty |= REGS_DIRTY | MEM_DIRTY | STACK_DIRTY
+							| INSTR_DIRTY;
 		}
 	}
 }

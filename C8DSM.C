@@ -31,6 +31,7 @@ void disasmOut(int op, char *disassembly) {
 		case 5:
 		charsWritten = sprintf(disassembly, "SE V%X, V%X",
 			(op & 0x0F00) >> 8, (op & 0x00F0) >> 4);
+		break;
 		case 6:
 		charsWritten = sprintf(disassembly, "LD V%X, %X",
 			(op & 0x0F00) >> 8, op & 0x00FF);

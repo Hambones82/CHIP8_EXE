@@ -16,6 +16,10 @@ void endDebug(void) {
 
 void dLog(char *msg, ...) {
 	va_list args;
+	if(debugFile == NULL) {
+		printf("debug file is null!!!@@@\n");
+		exit(1);
+	}
 	va_start(args, msg);
 	vfprintf(debugFile, msg, args);
 	va_end(args);

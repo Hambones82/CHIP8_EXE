@@ -1,6 +1,9 @@
+#include "c8hist.h"
+
 #ifndef C8STATE_H
 #define C8STATE_H
 
+#define HISTORY_STAGING_BUFFER_SIZE     256
 struct c8State {
 	/*regs*/
 	unsigned char v[16];
@@ -13,6 +16,11 @@ struct c8State {
 
 	unsigned int stack[16];
 	unsigned char mem[4096];
+
+	struct stateHistory *history;
+	struct historyTraverser *traverser;
+	unsigned char historyStagingBuffer[HISTORY_STAGING_BUFFER_SIZE];
+	unsigned char HSBSize;
 };
 
 int getOp(struct c8State *state);
